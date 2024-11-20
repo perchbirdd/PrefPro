@@ -31,7 +31,7 @@ public unsafe class LuaHandler : IDisposable
 		}
 		catch (Exception e)
 		{
-			DalamudApi.PluginLog.Error(e.ToString());
+			DalamudApi.PluginLog.Error(e, "PrefPro Lua Handler initialization failed.");
 		}
 	}
 
@@ -47,9 +47,9 @@ public unsafe class LuaHandler : IDisposable
 		_getSex = DalamudApi.Hooks.HookFromAddress<LuaFunction>(sexFunctionAddress, SexFunctionDetour);
 		_getTribe = DalamudApi.Hooks.HookFromAddress<LuaFunction>(tribeFunctionAddress, TribeFunctionDetour);
 
-		_luaRacePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(raceFunctionAddress + 0x30);
-		_luaSexPtr = (byte*)CodeUtil.GetStaticAddressFromPtr(sexFunctionAddress + 0x30);
-		_luaTribePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(tribeFunctionAddress + 0x30);
+		_luaRacePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(raceFunctionAddress + 0x32);
+		_luaSexPtr = (byte*)CodeUtil.GetStaticAddressFromPtr(sexFunctionAddress + 0x32);
+		_luaTribePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(tribeFunctionAddress + 0x32);
 			
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Race function address: {raceFunctionAddress:X}");
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Sex function address: {sexFunctionAddress:X}");
@@ -85,34 +85,58 @@ public unsafe class LuaHandler : IDisposable
 
 	private nuint RaceFunctionDetour(nuint a1)
 	{
-		Initialize();
-		var oldRace = *_luaRacePtr;
-		*_luaRacePtr = (byte)_configuration.Race;
-		DalamudApi.PluginLog.Debug($"[RaceFunctionDetour] oldRace: {oldRace} race: {(byte)_configuration.Race}");
-		var ret = _getRace.Original(a1);
-		*_luaRacePtr = oldRace;
-		return ret;
+		try
+		{
+			Initialize();
+			var oldRace = *_luaRacePtr;
+			*_luaRacePtr = (byte)_configuration.Race;
+			DalamudApi.PluginLog.Debug($"[RaceFunctionDetour] oldRace: {oldRace} race: {(byte)_configuration.Race}");
+			var ret = _getRace.Original(a1);
+			*_luaRacePtr = oldRace;
+			return ret;
+		}
+		catch (Exception e)
+		{
+			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
+			return _getRace.Original(a1);
+		}
 	}
 
 	private nuint SexFunctionDetour(nuint a1)
 	{
-		Initialize();
-		var oldSex = *_luaSexPtr;
-		*_luaSexPtr = (byte)_configuration.GetGender();
-		DalamudApi.PluginLog.Debug($"[SexFunctionDetour] oldSex: {oldSex} sex: {(byte)_configuration.GetGender()}");
-		var ret = _getSex.Original(a1);
-		*_luaSexPtr = oldSex;
-		return ret;
+		try
+		{
+			Initialize();
+			var oldSex = *_luaSexPtr;
+			*_luaSexPtr = (byte)_configuration.GetGender();
+			DalamudApi.PluginLog.Debug($"[SexFunctionDetour] oldSex: {oldSex} sex: {(byte)_configuration.GetGender()}");
+			var ret = _getSex.Original(a1);
+			*_luaSexPtr = oldSex;
+			return ret;
+		}
+		catch (Exception e)
+		{
+			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
+			return _getSex.Original(a1);
+		}
 	}
 
 	private nuint TribeFunctionDetour(nuint a1)
 	{
-		Initialize();
-		var oldTribe = *_luaTribePtr;
-		*_luaTribePtr = (byte)_configuration.Tribe;
-		DalamudApi.PluginLog.Debug($"[TribeFunctionDetour] oldTribe: {oldTribe} sex: {(byte)_configuration.Tribe}");
-		var ret = _getTribe.Original(a1);
-		*_luaTribePtr = oldTribe;
-		return ret;
+		try
+		{
+			Initialize();
+			var oldTribe = *_luaTribePtr;
+			*_luaTribePtr = (byte)_configuration.Tribe;
+			DalamudApi.PluginLog.Debug($"[TribeFunctionDetour] oldTribe: {oldTribe} sex: {(byte)_configuration.Tribe}");
+			var ret = _getTribe.Original(a1);
+			*_luaTribePtr = oldTribe;
+			return ret;
+		}
+		catch (Exception e)
+		{
+			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
+			return _getTribe.Original(a1);
+		}
 	}
 }
