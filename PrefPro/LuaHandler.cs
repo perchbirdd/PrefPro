@@ -47,9 +47,9 @@ public unsafe class LuaHandler : IDisposable
 		_getSex = DalamudApi.Hooks.HookFromAddress<LuaFunction>(sexFunctionAddress, SexFunctionDetour);
 		_getTribe = DalamudApi.Hooks.HookFromAddress<LuaFunction>(tribeFunctionAddress, TribeFunctionDetour);
 
-		_luaRacePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(raceFunctionAddress + 0x30);
-		_luaSexPtr = (byte*)CodeUtil.GetStaticAddressFromPtr(sexFunctionAddress + 0x30);
-		_luaTribePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(tribeFunctionAddress + 0x30);
+		_luaRacePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(raceFunctionAddress + 0x32);
+		_luaSexPtr = (byte*)CodeUtil.GetStaticAddressFromPtr(sexFunctionAddress + 0x32);
+		_luaTribePtr = (byte*)CodeUtil.GetStaticAddressFromPtr(tribeFunctionAddress + 0x32);
 			
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Race function address: {raceFunctionAddress:X}");
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Sex function address: {sexFunctionAddress:X}");
