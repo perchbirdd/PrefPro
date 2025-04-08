@@ -166,6 +166,7 @@ namespace PrefPro
         public void Save()
         {
             DalamudApi.PluginInterface.SavePluginConfig(this);
+            _prefPro.NameHandlerCache.Refresh();
         }
     }
 }

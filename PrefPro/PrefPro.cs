@@ -3,7 +3,6 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -13,6 +12,7 @@ using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.STD;
 using PrefPro.Settings;
+using System.Runtime.CompilerServices;
 
 namespace PrefPro;
 
@@ -40,6 +40,8 @@ public unsafe class PrefPro : IDalamudPlugin
     private delegate byte GetLuaVarPrototype(nint poolBase, nint a2, nint a3);
     private readonly Hook<GetLuaVarPrototype> _getLuaVarHook;
 
+    public readonly NameHandlerCache NameHandlerCache;
+
     public string PlayerName => DalamudApi.ClientState.LocalPlayer?.Name.ToString();
     public int PlayerGender => DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Gender] ?? 0;
     public RaceSetting PlayerRace => (RaceSetting) (DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Race] ?? 0);
@@ -57,6 +59,8 @@ public unsafe class PrefPro : IDalamudPlugin
             
         _configuration = DalamudApi.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         _configuration.Initialize(this);
+
+        NameHandlerCache = new NameHandlerCache(_configuration);
 
         _ui = new PluginUI(_configuration, this);
             
@@ -220,99 +224,64 @@ public unsafe class PrefPro : IDalamudPlugin
      */
     private void HandleName(ref byte* ptr)
     {
-        var firstApply = _configuration.FirstName != NameSetting.FirstOnly;
-        var lastApply = _configuration.LastName != NameSetting.LastOnly;
-        var fullApply = _configuration.FullName != NameSetting.FirstLast;
-        var nameApply = _configuration.Name != PlayerName;
-            
-        if (!firstApply && !lastApply && !fullApply && !nameApply) return;
-        
-        var byteList = new List<byte>();
-        int i = 0;
-        while (ptr[i] != 0)
-            byteList.Add(ptr[i++]);
-        var byteArr = byteList.ToArray();
-            
-        var parsed = SeString.Parse(byteArr);
-        for (int payloadIndex = 0; payloadIndex < parsed.Payloads.Count; payloadIndex++)
+        var data = NameHandlerCache.Config;
+        if (!data.Apply)
+            return;
+
+        var bytes = MemoryMarshal.CreateReadOnlySpanFromNullTerminated(ptr);
+        if (!bytes.Contains((byte)0x02))
+            return;
+
+        var parsed = SeString.Parse(ptr, bytes.Length);
+
+        var payloads = parsed.Payloads;
+        var numPayloads = payloads.Count;
+        var replaced = false;
+        for (var payloadIndex = 0; payloadIndex < numPayloads; payloadIndex++)
         {
-            var thisPayload = parsed.Payloads[payloadIndex];
-            if (thisPayload.Type == PayloadType.Unknown)
-            {
-                parsed.Payloads[payloadIndex] = HandleFullNamePayload(parsed.Payloads[payloadIndex]);
-                parsed.Payloads[payloadIndex] = HandleFirstNamePayload(parsed.Payloads[payloadIndex]);
-                parsed.Payloads[payloadIndex] = HandleLastNamePayload(parsed.Payloads[payloadIndex]);
+            var payload = payloads[payloadIndex];
+            if (payload.Type == PayloadType.Unknown) {
+                var payloadBytes = payload.Encode();
+                if (data.ApplyFull && ByteArrayEquals(payloadBytes, FullNameBytes))
+                {
+                    payloads[payloadIndex] = data.NameFull;
+                    replaced = true;
+                }
+                else if (data.ApplyFirst && ByteArrayEquals(payloadBytes, FirstNameBytes))
+                {
+                    payloads[payloadIndex] = data.NameFirst;
+                    replaced = true;
+                }
+                else if (data.ApplyLast && ByteArrayEquals(payloadBytes, LastNameBytes))
+                {
+                    payloads[payloadIndex] = data.NameLast;
+                    replaced = true;
+                }
             }
         }
-        var encoded = parsed.Encode();
 
-        if (ByteArrayEquals(encoded, byteArr)) return;
-            
-        if (encoded.Length <= byteArr.Length)
+        if (!replaced) return;
+
+        var src = parsed.EncodeWithNullTerminator();
+        var srcLength = src.Length;
+        var destLength = bytes.Length + 1; // Add 1 for null terminator not included in Span
+
+        if (srcLength <= destLength)
         {
-            int j;
-            for (j = 0; j < encoded.Length; j++)
-                ptr[j] = encoded[j];
-            ptr[j] = 0;    
+            src.CopyTo(new Span<byte>(ptr, destLength));
         }
         else
         {
-            byte* newStr = (byte*) Marshal.AllocHGlobal(encoded.Length + 1);
-            int j;
-            for (j = 0; j < encoded.Length; j++)
-                newStr[j] = encoded[j];
-            newStr[j] = 0;
+            var newStr = (byte*) Marshal.AllocHGlobal(srcLength);
+            src.CopyTo(new Span<byte>(newStr, srcLength));
             ptr = newStr;
         }
     }
-        
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ByteArrayEquals(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
     {
         return a1.SequenceEqual(a2);
-    }
-    
-    private Payload HandleFullNamePayload(Payload thisPayload)
-    {
-        if (_configuration.FullName == NameSetting.FirstLast && _configuration.Name == PlayerName) return thisPayload;
-        byte[] reEncode = thisPayload.Encode();
-        if (!ByteArrayEquals(reEncode, FullNameBytes)) return thisPayload;
-
-        return new TextPayload(GetNameText(_configuration.FullName));
-    }
-
-    private Payload HandleFirstNamePayload(Payload thisPayload)
-    {
-        if (_configuration.FirstName == NameSetting.FirstOnly && _configuration.Name == PlayerName) return thisPayload;
-        byte[] reEncode = thisPayload.Encode();
-        if (!ByteArrayEquals(reEncode, FirstNameBytes)) return thisPayload;
-            
-        return new TextPayload(GetNameText(_configuration.FirstName));
-    }
-        
-    private Payload HandleLastNamePayload(Payload thisPayload)
-    {
-        if (_configuration.LastName == NameSetting.LastOnly && _configuration.Name == PlayerName) return thisPayload;
-        byte[] reEncode = thisPayload.Encode();
-        if (!ByteArrayEquals(reEncode, LastNameBytes)) return thisPayload;
-
-        return new TextPayload(GetNameText(_configuration.LastName));
-    }
-    
-    private string GetNameText(NameSetting setting)
-    {
-        var name = _configuration.Name;
-        var split = name.Split(' ');
-        var first = split[0];
-        var last = split[1];
-
-        return setting switch
-        {
-            NameSetting.FirstLast => name,
-            NameSetting.FirstOnly => first,
-            NameSetting.LastOnly => last,
-            NameSetting.LastFirst => $"{last} {first}",
-            _ => PlayerName
-        };
     }
 
     private void OnCommand(string command, string args)
