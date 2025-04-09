@@ -31,4 +31,8 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="PrefPro.yaml" />
+  </ItemGroup>
 </Project>

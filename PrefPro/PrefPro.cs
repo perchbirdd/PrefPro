@@ -190,13 +190,13 @@ public unsafe class PrefPro : IDalamudPlugin
     private int GetCutVoGenderDetour(void* a1, void* a2)
     {
         var originalRet = _getCutVoGenderHook.Original(a1, a2);
-        DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] original returned {originalRet}");
+        // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] original returned {originalRet}");
 
         if (!_configuration.Enabled)
             return originalRet;
             
         var lang = GetCutVoLang();
-        DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] Lang returned {lang}");
+        // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] Lang returned {lang}");
 
         var v1 = *(int*) ((ulong)a2 + 28);
         var v2 = 12 * lang;
@@ -204,7 +204,7 @@ public unsafe class PrefPro : IDalamudPlugin
 
         if (v3 == 1)
         {
-            DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] v3 is 1");
+            // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] v3 is 1");
             return 0;
         }
         

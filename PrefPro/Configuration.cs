@@ -120,19 +120,14 @@ namespace PrefPro
             switch (Gender)
             {
                 case GenderSetting.Male:
-                    DalamudApi.PluginLog.Verbose($"[GetGender] returning 0");
                     return 0;
                 case GenderSetting.Female:
-                    DalamudApi.PluginLog.Verbose($"[GetGender] returning 1");
                     return 1;
                 case GenderSetting.Random:
                     var ret = new Random().Next(0, 2);
-                    DalamudApi.PluginLog.Verbose($"[GetGender] returning {ret}");
                     return ret;
                 case GenderSetting.Model:
-                    var modelGender = DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Gender] ?? 0;    
-                    DalamudApi.PluginLog.Verbose($"[GetGender] returning model gender: {modelGender}");
-                    return modelGender;
+                    return DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Gender] ?? 0;
             }
             return 0;
         }
