@@ -7,7 +7,7 @@ namespace PrefPro;
 public class NameHandlerCache
 {
     private readonly Configuration _configuration;
-    private string? _playerName;
+    public string? PlayerName;
 
     public HandlerConfig Config { get; private set; } = HandlerConfig.None;
 
@@ -22,15 +22,15 @@ public class NameHandlerCache
     {
         if (DalamudApi.ClientState.IsLoggedIn && DalamudApi.ClientState.LocalPlayer is { } localPlayer) {
             DalamudApi.Framework.Update -= FrameworkOnUpdate;
-            _playerName = localPlayer.Name.TextValue;
+            PlayerName = localPlayer.Name.TextValue;
             Refresh();
         }
     }
 
     private void OnLogout(int type, int code)
     {
-        if (_playerName != null) {
-            _playerName = null;
+        if (PlayerName != null) {
+            PlayerName = null;
             Config = HandlerConfig.None;
             DalamudApi.Framework.Update += FrameworkOnUpdate;
         }
@@ -38,14 +38,19 @@ public class NameHandlerCache
 
     public void Refresh()
     {
-        if (_playerName != null) {
-            Config = CreateConfig(_configuration, _playerName);
+        if (PlayerName != null) {
+            Config = CreateConfig(_configuration, PlayerName);
         }
     }
 
     private static HandlerConfig CreateConfig(Configuration config, string playerName)
     {
         var data = new HandlerConfig();
+
+        if (string.IsNullOrEmpty(config.Name))
+        {
+            return HandlerConfig.None;
+        }
 
         if (config.Name != playerName)
         {
@@ -78,7 +83,8 @@ public class NameHandlerCache
 
     private static string GetNameText(string playerName, string configName, NameSetting setting)
     {
-        switch (setting) {
+        switch (setting)
+        {
             case NameSetting.FirstLast:
                 return configName;
             case NameSetting.FirstOnly:

@@ -146,7 +146,7 @@ namespace PrefPro
             {
                 var ch = new ConfigHolder
                 {
-                    Name = _prefPro.PlayerName,
+                    Name = _prefPro.PlayerName ?? "",
                     FullName = NameSetting.FirstLast,
                     FirstName = NameSetting.FirstOnly,
                     LastName = NameSetting.LastOnly,

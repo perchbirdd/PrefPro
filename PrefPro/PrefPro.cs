@@ -42,7 +42,7 @@ public unsafe class PrefPro : IDalamudPlugin
 
     public readonly NameHandlerCache NameHandlerCache;
 
-    public string PlayerName => DalamudApi.ClientState.LocalPlayer?.Name.ToString();
+    public string? PlayerName => NameHandlerCache.PlayerName;
     public int PlayerGender => DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Gender] ?? 0;
     public RaceSetting PlayerRace => (RaceSetting) (DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Race] ?? 0);
     public TribeSetting PlayerTribe => (TribeSetting) (DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Tribe] ?? 0);
