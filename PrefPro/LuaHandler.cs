@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Globalization;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 
@@ -9,9 +8,9 @@ public unsafe class LuaHandler : IDisposable
 {
 	public delegate nuint LuaFunction(nuint a1);
 
-	private Hook<LuaFunction> _getRace;
-	private Hook<LuaFunction> _getSex;
-	private Hook<LuaFunction> _getTribe;
+	private Hook<LuaFunction>? _getRace;
+	private Hook<LuaFunction>? _getSex;
+	private Hook<LuaFunction>? _getTribe;
 
 	private byte* _luaRacePtr;
 	private byte* _luaSexPtr;
@@ -21,10 +20,16 @@ public unsafe class LuaHandler : IDisposable
 
 	private readonly Configuration _configuration;
 	
-	public LuaHandler(Configuration configuration)
+	public LuaHandler(LoginState loginState, Configuration configuration)
 	{
 		_configuration = configuration;
-		
+
+		loginState.Login += OnLogin;
+		loginState.Logout += OnLogout;
+	}
+
+	private void OnLogin()
+	{
 		try
 		{
 			Initialize();
@@ -32,7 +37,28 @@ public unsafe class LuaHandler : IDisposable
 		catch (Exception e)
 		{
 			DalamudApi.PluginLog.Error(e, "PrefPro Lua Handler initialization failed.");
+			return;
 		}
+
+		DalamudApi.PluginLog.Debug("Enabling LuaHandler");
+		_getRace?.Enable();
+		_getSex?.Enable();
+		_getTribe?.Enable();
+	}
+
+	private void OnLogout()
+	{
+		DalamudApi.PluginLog.Debug("Disabling LuaHandler");
+		_getRace?.Disable();
+		_getSex?.Disable();
+		_getTribe?.Disable();
+	}
+
+	public void Dispose()
+	{
+		_getRace?.Dispose();
+		_getSex?.Dispose();
+		_getTribe?.Dispose();
 	}
 
 	private void Initialize()
@@ -58,21 +84,10 @@ public unsafe class LuaHandler : IDisposable
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Race data address: {(nint) _luaRacePtr:X}");
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Sex data address: {(nint) _luaSexPtr:X}");
 		DalamudApi.PluginLog.Debug($"[LuaHandler] Tribe data address: {(nint) _luaTribePtr:X}");
-			
-		_getRace.Enable();
-		_getSex.Enable();
-		_getTribe.Enable();
 
 		_initialized = true;
 	}
 
-	public void Dispose()
-	{
-		_getRace?.Dispose();
-		_getSex?.Dispose();
-		_getTribe?.Dispose();
-	}
-    
 	private nint GetAddress(string code) {
 		var l = Framework.Instance()->LuaState.State;
 		l->luaL_loadbuffer(code, code.Length, "test_chunk");
@@ -87,18 +102,17 @@ public unsafe class LuaHandler : IDisposable
 	{
 		try
 		{
-			Initialize();
 			var oldRace = *_luaRacePtr;
 			*_luaRacePtr = (byte)_configuration.Race;
 			DalamudApi.PluginLog.Debug($"[RaceFunctionDetour] oldRace: {oldRace} race: {(byte)_configuration.Race}");
-			var ret = _getRace.Original(a1);
+			var ret = _getRace!.Original(a1);
 			*_luaRacePtr = oldRace;
 			return ret;
 		}
 		catch (Exception e)
 		{
 			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
-			return _getRace.Original(a1);
+			return _getRace!.Original(a1);
 		}
 	}
 
@@ -106,18 +120,17 @@ public unsafe class LuaHandler : IDisposable
 	{
 		try
 		{
-			Initialize();
 			var oldSex = *_luaSexPtr;
 			*_luaSexPtr = (byte)_configuration.GetGender();
 			DalamudApi.PluginLog.Debug($"[SexFunctionDetour] oldSex: {oldSex} sex: {(byte)_configuration.GetGender()}");
-			var ret = _getSex.Original(a1);
+			var ret = _getSex!.Original(a1);
 			*_luaSexPtr = oldSex;
 			return ret;
 		}
 		catch (Exception e)
 		{
 			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
-			return _getSex.Original(a1);
+			return _getSex!.Original(a1);
 		}
 	}
 
@@ -125,18 +138,17 @@ public unsafe class LuaHandler : IDisposable
 	{
 		try
 		{
-			Initialize();
 			var oldTribe = *_luaTribePtr;
 			*_luaTribePtr = (byte)_configuration.Tribe;
 			DalamudApi.PluginLog.Debug($"[TribeFunctionDetour] oldTribe: {oldTribe} sex: {(byte)_configuration.Tribe}");
-			var ret = _getTribe.Original(a1);
+			var ret = _getTribe!.Original(a1);
 			*_luaTribePtr = oldTribe;
 			return ret;
 		}
 		catch (Exception e)
 		{
 			DalamudApi.PluginLog.Error(e, "PrefPro Exception");
-			return _getTribe.Original(a1);
+			return _getTribe!.Original(a1);
 		}
 	}
 }
