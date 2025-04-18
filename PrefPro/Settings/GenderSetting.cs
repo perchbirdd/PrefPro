@@ -2,8 +2,8 @@
 
 public enum GenderSetting
 {
-	Male,
-	Female,
-	Random,
-	Model
+    Male,
+    Female,
+    Random,
+    Model
 }

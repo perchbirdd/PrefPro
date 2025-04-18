@@ -1,51 +1,58 @@
-using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Plugin.Services;
 using PrefPro.Settings;
+using System;
 
 namespace PrefPro;
 
-public class NameHandlerCache
+public class NameHandlerCache : IDisposable
 {
     private readonly Configuration _configuration;
-    private string? _playerName;
 
-    public HandlerConfig Config { get; private set; } = HandlerConfig.None;
+    private HandlerConfig _config = HandlerConfig.None;
 
     public NameHandlerCache(Configuration configuration)
     {
         _configuration = configuration;
+
+        DalamudApi.ClientState.Login += OnLogin;
         DalamudApi.ClientState.Logout += OnLogout;
-        DalamudApi.Framework.Update += FrameworkOnUpdate;
     }
 
-    private void FrameworkOnUpdate(IFramework framework)
+    public void Dispose()
     {
-        if (DalamudApi.ClientState.IsLoggedIn && DalamudApi.ClientState.LocalPlayer is { } localPlayer) {
-            DalamudApi.Framework.Update -= FrameworkOnUpdate;
-            _playerName = localPlayer.Name.TextValue;
+        DalamudApi.ClientState.Login -= OnLogin;
+        DalamudApi.ClientState.Logout -= OnLogout;
+
+        GC.SuppressFinalize(this);
+    }
+
+    public HandlerConfig GetConfig()
+    {
+        if (_config == HandlerConfig.None)
             Refresh();
-        }
+
+        return _config;
+    }
+
+    private void OnLogin()
+    {
+        Refresh();
     }
 
     private void OnLogout(int type, int code)
     {
-        if (_playerName != null) {
-            _playerName = null;
-            Config = HandlerConfig.None;
-            DalamudApi.Framework.Update += FrameworkOnUpdate;
-        }
+        _config = HandlerConfig.None;
     }
 
     public void Refresh()
     {
-        if (_playerName != null) {
-            Config = CreateConfig(_configuration, _playerName);
-        }
+        if (DalamudApi.ClientState.IsLoggedIn)
+            _config = CreateConfig(_configuration);
     }
 
-    private static HandlerConfig CreateConfig(Configuration config, string playerName)
+    private static HandlerConfig CreateConfig(Configuration config)
     {
         var data = new HandlerConfig();
+        var playerName = PlayerApi.CharacterName;
 
         if (config.Name != playerName)
         {
@@ -68,9 +75,9 @@ public class NameHandlerCache
         {
             data.Apply = true;
 
-            data.NameFull = new TextPayload(GetNameText(playerName, config.Name, config.FullName));
-            data.NameFirst = new TextPayload(GetNameText(playerName, config.Name, config.FirstName));
-            data.NameLast = new TextPayload(GetNameText(playerName, config.Name, config.LastName));
+            data.NameFull = GetNameText(playerName, config.Name, config.FullName);
+            data.NameFirst = GetNameText(playerName, config.Name, config.FirstName);
+            data.NameLast = GetNameText(playerName, config.Name, config.LastName);
         }
 
         return data;
@@ -78,7 +85,8 @@ public class NameHandlerCache
 
     private static string GetNameText(string playerName, string configName, NameSetting setting)
     {
-        switch (setting) {
+        switch (setting)
+        {
             case NameSetting.FirstLast:
                 return configName;
             case NameSetting.FirstOnly:
@@ -100,9 +108,9 @@ public class HandlerConfig
     public bool ApplyFull;
     public bool ApplyFirst;
     public bool ApplyLast;
-    public TextPayload NameFull = null!;
-    public TextPayload NameFirst = null!;
-    public TextPayload NameLast = null!;
+    public string NameFull = string.Empty;
+    public string NameFirst = string.Empty;
+    public string NameLast = string.Empty;
 
     public static readonly HandlerConfig None = new()
     {

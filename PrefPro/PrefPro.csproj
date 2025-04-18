@@ -26,10 +26,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Iced">
-      <HintPath>$(DalamudLibPath)Iced.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
+    <Reference Include="Microsoft.Extensions.ObjectPool" Private="false" />
   </ItemGroup>
 
   <ItemGroup>
