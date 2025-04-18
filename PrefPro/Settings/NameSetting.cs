@@ -2,8 +2,8 @@
 
 public enum NameSetting
 {
-	FirstLast,
-	FirstOnly,
-	LastOnly,
-	LastFirst
+    FirstLast,
+    FirstOnly,
+    LastOnly,
+    LastFirst
 }

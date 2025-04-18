@@ -2,13 +2,13 @@
 
 public enum RaceSetting
 {
-	Unknown,
-	Hyur,
-	Elezen,
-	Lalafell,
-	Miqote,
-	Roegadyn,
-	AuRa,
-	Hrothgar,
-	Viera,
+    Unknown,
+    Hyur,
+    Elezen,
+    Lalafell,
+    Miqote,
+    Roegadyn,
+    AuRa,
+    Hrothgar,
+    Viera,
 }
