@@ -22,7 +22,7 @@ public sealed unsafe class GenderHandler: IDisposable
     {
         _configuration = configuration;
 
-        var getCutVoGender = "E8 ?? ?? ?? ?? 49 8B 17 85 DB";
+        var getCutVoGender = "E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 8B D8 48 8B 89 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 63 4F 24";
         if (DalamudApi.SigScanner.TryScanText(getCutVoGender, out var getCutVoGenderPtr))
         {
             _getCutVoGenderHook = DalamudApi.Hooks.HookFromAddress<GetCutVoGenderPrototype>(getCutVoGenderPtr, GetCutVoGenderDetour);
