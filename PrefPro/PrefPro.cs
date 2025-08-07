@@ -73,7 +73,7 @@ public unsafe class PrefPro : IDalamudPlugin
         var getStringPtr = DalamudApi.SigScanner.ScanText(getStringStr);
         _getStringHook = DalamudApi.Hooks.HookFromAddress<GetStringPrototype>(getStringPtr, GetStringDetour);
             
-        var getCutVoGender = "E8 ?? ?? ?? ?? 49 8B 17 85 DB";
+        var getCutVoGender = "E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 8B D8 48 8B 89 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 63 4F 24";
         var getCutVoGenderPtr = DalamudApi.SigScanner.ScanText(getCutVoGender);
         _getCutVoGenderHook = DalamudApi.Hooks.HookFromAddress<GetCutVoGenderPrototype>(getCutVoGenderPtr, GetCutVoGenderDetour);
             
