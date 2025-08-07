@@ -127,7 +127,7 @@ namespace PrefPro
                     var ret = new Random().Next(0, 2);
                     return ret;
                 case GenderSetting.Model:
-                    return DalamudApi.ClientState.LocalPlayer?.Customize[(int)CustomizeIndex.Gender] ?? 0;
+                    return _prefPro.PlayerGender;
             }
             return 0;
         }
@@ -146,7 +146,7 @@ namespace PrefPro
             {
                 var ch = new ConfigHolder
                 {
-                    Name = _prefPro.PlayerName,
+                    Name = _prefPro.PlayerName ?? "",
                     FullName = NameSetting.FirstLast,
                     FirstName = NameSetting.FirstOnly,
                     LastName = NameSetting.LastOnly,
@@ -161,7 +161,7 @@ namespace PrefPro
         public void Save()
         {
             DalamudApi.PluginInterface.SavePluginConfig(this);
-            _prefPro.NameHandlerCache.Refresh();
+            _prefPro.OnConfigSave();
         }
     }
 }

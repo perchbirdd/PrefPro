@@ -25,18 +25,16 @@ namespace PrefPro
 
         private string _tmpFirstName = "";
         private string _tmpLastName = "";
+        private bool _resetNames;
 
         public bool SettingsVisible
         {
             get => _settingsVisible;
-            // set => _settingsVisible = value;
             set
             {
                 if (value)
                 {
-                    var split = _configuration.Name.Split(' ');
-                    _tmpFirstName = split[0];
-                    _tmpLastName = split[1];
+                    _resetNames = true;
                 }
                 _settingsVisible = value;
             }
@@ -68,6 +66,27 @@ namespace PrefPro
             ImGui.SetNextWindowSize(size, ImGuiCond.FirstUseEver);
             if (ImGui.Begin("PrefPro Config", ref _settingsVisible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
             {
+                if (_prefPro.PlayerName is null || DalamudApi.ClientState.LocalPlayer is null)
+                {
+                    ImGui.TextWrapped("Configuration is not available while logged out or in a loading screen.");
+                    ImGui.End();
+                    return;
+                }
+
+                if (_configuration.Name == "")
+                {
+                    DalamudApi.PluginLog.Debug($"Configuration name is empty, setting to current player name ({_prefPro.PlayerName}).");
+                    _configuration.Name = _prefPro.PlayerName;
+                }
+
+                if (_resetNames)
+                {
+                    var split = _configuration.Name.Split(' ');
+                    _tmpFirstName = split[0];
+                    _tmpLastName = split[1];
+                    _resetNames = false;
+                }
+
                 var enabled = _configuration.Enabled;
                 var currentGender = _configuration.Gender;
                 var currentRace = _configuration.Race;
