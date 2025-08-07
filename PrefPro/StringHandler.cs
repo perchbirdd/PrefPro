@@ -1,25 +1,22 @@
-using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Hooking;
-using FFXIVClientStructs.FFXIV.Client.System.String;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using FFXIVClientStructs.STD;
-using PrefPro.Settings;
 using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+using System.Text;
+using Dalamud.Hooking;
+using Dalamud.Utility;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Component.Text;
+using FFXIVClientStructs.STD;
+using InteropGenerator.Runtime;
+using Lumina.Text;
+using Lumina.Text.Expressions;
+using Lumina.Text.Payloads;
+using Lumina.Text.ReadOnly;
+using PrefPro.Settings;
 
 namespace PrefPro;
 
 public sealed unsafe class StringHandler : IDisposable
 {
-    //reEncode[1] == 0x29 && reEncode[2] == 0x3 && reEncode[3] == 0xEB && reEncode[4] == 0x2
-    private static readonly byte[] FullNameBytes = [0x02, 0x29, 0x03, 0xEB, 0x02, 0x03];
-    private static readonly byte[] FirstNameBytes = [0x02, 0x2C, 0x0D, 0xFF, 0x07, 0x02, 0x29, 0x03, 0xEB, 0x02, 0x03, 0xFF, 0x02, 0x20, 0x02, 0x03];
-    private static readonly byte[] LastNameBytes = [0x02, 0x2C, 0x0D, 0xFF, 0x07, 0x02, 0x29, 0x03, 0xEB, 0x02, 0x03, 0xFF, 0x02, 0x20, 0x03, 0x03];
-
-    private delegate int GetStringPrototype(RaptureTextModule* textModule, byte* text, void* decoder, Utf8String* stringStruct);
-    private readonly Hook<GetStringPrototype>? _getStringHook;
+    private readonly Hook<TextModule.Delegates.FormatString>? _formatStringHook;
 
     private readonly LoginState _loginState;
     private readonly Configuration _configuration;
@@ -31,14 +28,16 @@ public sealed unsafe class StringHandler : IDisposable
         _loginState = loginState;
         _configuration = configuration;
 
-        var getStringStr = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 83 B9 ?? ?? ?? ?? ?? 49 8B F9 49 8B F0 48 8B EA 48 8B D9 75 09 48 8B 01 FF 90";
-        if (DalamudApi.SigScanner.TryScanText(getStringStr, out var getStringPtr))
+        var formatStringSig =
+            "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 83 B9 ?? ?? ?? ?? ?? 49 8B F9 49 8B F0 48 8B EA 48 8B D9 75 09 48 8B 01 FF 90";
+        if (DalamudApi.SigScanner.TryScanText(formatStringSig, out var getStringPtr))
         {
-            _getStringHook = DalamudApi.Hooks.HookFromAddress<GetStringPrototype>(getStringPtr, GetStringDetour);
+            _formatStringHook =
+                DalamudApi.Hooks.HookFromAddress<TextModule.Delegates.FormatString>(getStringPtr, FormatStringDetour);
         }
         else
         {
-            DalamudApi.PluginLog.Error("Failed to hook GetStringPrototype.");
+            DalamudApi.PluginLog.Error("Failed to hook FormatString.");
             return;
         }
 
@@ -50,123 +49,98 @@ public sealed unsafe class StringHandler : IDisposable
     {
         DalamudApi.PluginLog.Debug("Enabling StringHandler");
         RefreshConfig();
-        _getStringHook?.Enable();
+        _formatStringHook?.Enable();
     }
 
     private void OnLogout()
     {
         DalamudApi.PluginLog.Debug("Disabling StringHandler");
         RefreshConfig();
-        _getStringHook?.Disable();
+        _formatStringHook?.Disable();
     }
 
     public void Dispose()
     {
-        _getStringHook?.Dispose();
-    }
-
-    private int GetStringDetour(RaptureTextModule* raptureTextModule, byte* text, void* unknown2, Utf8String* output)
-    {
-        // DalamudApi.PluginLog.Verbose($"[getStringDetour] {(nuint)raptureTextModule:X2} {(nuint)text:X2} {(nuint)unknown2:X2} {(nuint)stringStruct:X2}");
-        if (!_configuration.Enabled)
-            return _getStringHook!.Original(raptureTextModule, text, unknown2, output);
-
-        var decoderParams = ***(StdDeque<UnknownStruct>***)((nuint)RaptureTextModule.Instance() + 0x40);
-
-        var raceParam = decoderParams[70];
-        var oldRace = raceParam.Value;
-        if (raceParam.Self == 0)
-            return _getStringHook!.Original(raptureTextModule, text, unknown2, output);
-        var racePtr = (ulong*)raceParam.Self;
-        *racePtr = (ulong)_configuration.Race;
-
-        var genderParam = decoderParams[3];
-        var oldGender = genderParam.Value;
-        if (genderParam.Self == 0)
-            return _getStringHook!.Original(raptureTextModule, text, unknown2, output);
-        var genderPtr = (ulong*)genderParam.Self;
-        *genderPtr = (ulong)_configuration.GetGender();
-
-        HandleName(ref text);
-        var result = _getStringHook!.Original(raptureTextModule, text, unknown2, output);
-        // Marshal.FreeHGlobal((IntPtr)text);
-
-        raceParam = decoderParams[70];
-        racePtr = (ulong*)raceParam.Self;
-        *racePtr = oldRace;
-
-        genderParam = decoderParams[3];
-        genderPtr = (ulong*)genderParam.Self;
-        *genderPtr = oldGender;
-
-        return result;
+        _formatStringHook?.Dispose();
     }
 
     /**
      * This function is still necessary because of the name options provided in earlier versions.
      * So, we will never really be able to get rid of the string parsing in PrefPro.
      */
-    private void HandleName(ref byte* ptr)
+    private bool FormatStringDetour(TextModule* thisPtr, CStringPointer input, StdDeque<TextParameter>* localParameters,
+        Utf8String* output)
     {
+        if (!_configuration.Enabled)
+            goto originalFormatString;
+
         var data = _handlerConfig;
         if (!data.Apply)
-            return;
+            goto originalFormatString;
 
-        var bytes = MemoryMarshal.CreateReadOnlySpanFromNullTerminated(ptr);
-        if (!bytes.Contains((byte)0x02))
-            return;
+        var seString = input.AsReadOnlySeStringSpan();
+        if (seString.IsEmpty || seString.IsTextOnly())
+            goto originalFormatString;
 
-        var parsed = SeString.Parse(ptr, bytes.Length);
+        ref var decoderParams = ref thisPtr->GlobalParameters;
+        if (decoderParams.Count < 70)
+            goto originalFormatString;
 
-        var payloads = parsed.Payloads;
-        var numPayloads = payloads.Count;
-        var replaced = false;
-        for (var payloadIndex = 0; payloadIndex < numPayloads; payloadIndex++)
+        ref var raceParam = ref decoderParams[70];
+        if (raceParam.ValuePtr == null)
+            goto originalFormatString;
+
+        ref var genderParam = ref decoderParams[3];
+        if (genderParam.ValuePtr == null)
+            goto originalFormatString;
+
+        var oldRace = raceParam.IntValue;
+        raceParam.IntValue = (int)_configuration.Race;
+
+        var oldGender = genderParam.IntValue;
+        genderParam.IntValue = _configuration.GetGender();
+
+        var sb = SeStringBuilder.SharedPool.Get();
+
+        try
         {
-            var payload = payloads[payloadIndex];
-            if (payload.Type == PayloadType.Unknown)
+            foreach (var payload in seString)
             {
-                var payloadBytes = payload.Encode();
-                if (data.ApplyFull && ByteArrayEquals(payloadBytes, FullNameBytes))
+                if (data.ApplyFull && ShouldHandleStringPayload(payload))
                 {
-                    payloads[payloadIndex] = data.NameFull;
-                    replaced = true;
+                    sb.Append(data.NameFull);
                 }
-                else if (data.ApplyFirst && ByteArrayEquals(payloadBytes, FirstNameBytes))
+                else if (data.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
                 {
-                    payloads[payloadIndex] = data.NameFirst;
-                    replaced = true;
+                    sb.Append(data.NameFirst);
                 }
-                else if (data.ApplyLast && ByteArrayEquals(payloadBytes, LastNameBytes))
+                else if (data.ApplyLast && ShouldHandleSplitPayload(payload, 2))
                 {
-                    payloads[payloadIndex] = data.NameLast;
-                    replaced = true;
+                    sb.Append(data.NameLast);
+                }
+                else
+                {
+                    sb.Append(payload);
                 }
             }
+
+            fixed (byte* newInput = sb.GetViewAsSpan())
+                return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
         }
-
-        if (!replaced) return;
-
-        var src = parsed.EncodeWithNullTerminator();
-        var srcLength = src.Length;
-        var destLength = bytes.Length + 1; // Add 1 for null terminator not included in Span
-
-        if (srcLength <= destLength)
+        catch (Exception ex)
         {
-            src.CopyTo(new Span<byte>(ptr, destLength));
+            DalamudApi.PluginLog.Error(ex, "PrefPro Exception");
         }
-        else
+        finally
         {
-            var newStr = (byte*)Marshal.AllocHGlobal(srcLength);
-            src.CopyTo(new Span<byte>(newStr, srcLength));
-            ptr = newStr;
-        }
-    }
+            SeStringBuilder.SharedPool.Return(sb);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ByteArrayEquals(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
-    {
-        return a1.SequenceEqual(a2);
+            raceParam.IntValue = oldRace;
+            genderParam.IntValue = oldGender;
+        }
+
+        originalFormatString:
+        return _formatStringHook.Original(thisPtr, input, localParameters, output);
     }
 
     public void RefreshConfig()
@@ -211,12 +185,22 @@ public sealed unsafe class StringHandler : IDisposable
         {
             data.Apply = true;
 
-            data.NameFull = new TextPayload(GetNameText(playerName, config.Name, config.FullName));
-            data.NameFirst = new TextPayload(GetNameText(playerName, config.Name, config.FirstName));
-            data.NameLast = new TextPayload(GetNameText(playerName, config.Name, config.LastName));
+            var nameFull = GetNameText(playerName, config.Name, config.FullName);
+            var nameFirst = GetNameText(playerName, config.Name, config.FirstName);
+            var nameLast = GetNameText(playerName, config.Name, config.LastName);
+
+            data.NameFull = MakePayload(nameFull);
+            data.NameFirst = MakePayload(nameFirst);
+            data.NameLast = MakePayload(nameLast);
         }
 
         return data;
+    }
+
+    private static ReadOnlySePayload MakePayload(string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        return new ReadOnlySePayload(ReadOnlySePayloadType.Text, macroCode: default, bytes);
     }
 
     private static string GetNameText(string playerName, string configName, NameSetting setting)
@@ -236,20 +220,50 @@ public sealed unsafe class StringHandler : IDisposable
                 return playerName;
         }
     }
-}
 
-public class HandlerConfig
-{
-    public bool Apply;
-    public bool ApplyFull;
-    public bool ApplyFirst;
-    public bool ApplyLast;
-    public TextPayload NameFull = null!;
-    public TextPayload NameFirst = null!;
-    public TextPayload NameLast = null!;
-
-    public static readonly HandlerConfig None = new()
+    // <string(gstr1)> 
+    private static bool ShouldHandleStringPayload(ReadOnlySePayloadSpan payload)
     {
-        Apply = false
-    };
+        return payload.Type == ReadOnlySePayloadType.Macro
+               && payload.MacroCode == MacroCode.String
+               && payload.TryGetExpression(out var expr1)
+               && expr1.TryGetParameterExpression(out var expressionType, out var operand)
+               && expressionType == (byte)ExpressionType.GlobalString
+               && operand.TryGetInt(out var gstrIndex)
+               && gstrIndex == 1;
+    }
+
+    // <split(<string(gstr1)>, ,index)> 
+    private static bool ShouldHandleSplitPayload(ReadOnlySePayloadSpan payload, int splitIndex)
+    {
+        if (payload.Type == ReadOnlySePayloadType.Macro
+            && payload.MacroCode == MacroCode.Split
+            && payload.TryGetExpression(out var expr1, out var _, out var expr3)
+            && expr1.TryGetString(out var text)
+            && text.PayloadCount == 1
+            && expr3.TryGetInt(out var index)
+            && index == splitIndex)
+        {
+            var enu = text.GetEnumerator();
+            return enu.MoveNext() && ShouldHandleStringPayload(enu.Current);
+        }
+
+        return false;
+    }
+
+    public class HandlerConfig
+    {
+        public bool Apply;
+        public bool ApplyFull;
+        public bool ApplyFirst;
+        public bool ApplyLast;
+        public ReadOnlySePayload? NameFull;
+        public ReadOnlySePayload? NameFirst;
+        public ReadOnlySePayload? NameLast;
+
+        public static readonly HandlerConfig None = new()
+        {
+            Apply = false
+        };
+    }
 }

@@ -23,6 +23,7 @@ public class DalamudApi
     // [PluginService] public static IFlyTextGui FlyTextGui { get; private set; } = null;
     [PluginService] public static IFramework Framework { get; private set; } = null;
     // [PluginService] public static IGameGui GameGui { get; private set; } = null;
+    [PluginService] public static IGameConfig GameConfig { get; private set; } = null;
     // [PluginService] public static IGameNetwork GameNetwork { get; private set; } = null;
     // [PluginService] public static IGamepadState GamePadState { get; private set; } = null;
     // [PluginService] public static IJobGauges JobGauges { get; private set; } = null;

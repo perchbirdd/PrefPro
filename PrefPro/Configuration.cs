@@ -1,7 +1,6 @@
 ﻿using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
-using Dalamud.Game.ClientState.Objects.Enums;
 using Newtonsoft.Json;
 using PrefPro.Settings;
 
@@ -24,7 +23,7 @@ namespace PrefPro
             public TribeSetting Tribe;
         }
 
-        public Dictionary<ulong, ConfigHolder> Configs { get; set; } = new Dictionary<ulong, ConfigHolder>();
+        public Dictionary<ulong, ConfigHolder> Configs { get; set; } = new();
 
         [JsonIgnore]
         public bool Enabled
@@ -34,7 +33,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.Enabled = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -45,7 +44,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.Name = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -56,7 +55,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.FullName = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -67,7 +66,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.FirstName = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -78,7 +77,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.LastName = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -89,7 +88,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.Gender = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -100,7 +99,7 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.Race = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         [JsonIgnore]
@@ -111,25 +110,20 @@ namespace PrefPro
             {
                 var config = GetOrDefault();
                 config.Tribe = value;
-                Configs[_prefPro.CurrentPlayerContentId] = config;
+                Configs[PlayerApi.ContentId] = config;
             }
         }
         
         public int GetGender()
         {
-            switch (Gender)
+            return Gender switch
             {
-                case GenderSetting.Male:
-                    return 0;
-                case GenderSetting.Female:
-                    return 1;
-                case GenderSetting.Random:
-                    var ret = new Random().Next(0, 2);
-                    return ret;
-                case GenderSetting.Model:
-                    return _prefPro.PlayerGender;
-            }
-            return 0;
+                GenderSetting.Male => 0,
+                GenderSetting.Female => 1,
+                GenderSetting.Random => Random.Shared.Next(0, 2),
+                // Model is PlayerApi.Sex as well
+                _ => PlayerApi.Sex,
+            };
         }
         
         [NonSerialized] private PrefPro _prefPro;
@@ -141,12 +135,12 @@ namespace PrefPro
 
         public ConfigHolder GetOrDefault()
         {
-            bool result = Configs.TryGetValue(_prefPro.CurrentPlayerContentId, out var holder);
+            bool result = Configs.TryGetValue(PlayerApi.ContentId, out var holder);
             if (!result)
             {
                 var ch = new ConfigHolder
                 {
-                    Name = _prefPro.PlayerName ?? "",
+                    Name = PlayerApi.CharacterName,
                     FullName = NameSetting.FirstLast,
                     FirstName = NameSetting.FirstOnly,
                     LastName = NameSetting.LastOnly,

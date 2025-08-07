@@ -7,10 +7,10 @@ namespace PrefPro;
 
 public sealed unsafe class GenderHandler: IDisposable
 {
-    private delegate int GetCutVoGenderPrototype(void* a1, void* a2);
+    private delegate int GetCutVoGenderPrototype(nint a1, nint a2);
     private readonly Hook<GetCutVoGenderPrototype>? _getCutVoGenderHook;
 
-    private delegate int GetCutVoLangPrototype(void* a1);
+    private delegate int GetCutVoLangPrototype(nint a1);
     private readonly GetCutVoLangPrototype? _getCutVoLang;
 
     private delegate byte GetLuaVarPrototype(nint poolBase, nint a2, nint a3);
@@ -102,34 +102,23 @@ public sealed unsafe class GenderHandler: IDisposable
         *(int*)(poolBase + 4 * genderVarId) = gender;
     }
 
-    private int GetCutVoGenderDetour(void* a1, void* a2)
+    private int GetCutVoGenderDetour(nint a1, nint a2)
     {
-        var originalRet = _getCutVoGenderHook!.Original(a1, a2);
-        // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] original returned {originalRet}");
+        var originalRet = _getCutVoGenderHook.Original(a1, a2);
 
         if (!_configuration.Enabled)
             return originalRet;
 
-        var lang = GetCutVoLang();
-        // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] Lang returned {lang}");
+        // see Client::System::Framework::EnvironmentManager.GetCutsceneLanguage
+        var lang = (uint)Framework.Instance()->EnvironmentManager->CutsceneMovieVoice;
+        if (lang == uint.MaxValue)
+            lang = DalamudApi.GameConfig.System.GetUInt("CutsceneMovieVoice");
+        if (lang == uint.MaxValue)
+            lang = DalamudApi.GameConfig.System.GetUInt("Language");
 
-        var v1 = *(int*) ((ulong)a2 + 28);
-        var v2 = 12 * lang;
-        var v3 = *(int*) ((ulong)a2 + (ulong)v1 + (ulong)v2);
+        if (*(int*)(a2 + *(int*)(a2 + 0x1C) + (12 * lang)) != 1)
+            return _configuration.GetGender();
 
-        if (v3 == 1)
-        {
-            // DalamudApi.PluginLog.Verbose($"[GetCutVoGenderDetour] v3 is 1");
-            return 0;
-        }
-
-        return _configuration.GetGender();
-    }
-
-    private int GetCutVoLang()
-    {
-        // var offs = *(void**) ((nint)Framework.Instance() + (int) _frameworkLangCallOffset);
-        // DalamudApi.PluginLog.Verbose($"[GetCutVoLang] {(ulong) offs} {(ulong) offs:X}");
-        return _getCutVoLang!(Framework.Instance()->EnvironmentManager);
+        return 0;
     }
 }

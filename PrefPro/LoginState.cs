@@ -26,7 +26,7 @@ public class LoginState
         if (LoggedIn) return;
 
         var playerState = PlayerState.Instance();
-        if (playerState->IsLoaded == 1) {
+        if (playerState->IsLoaded) {
             var name = playerState->CharacterNameString;
             if (name.Length > 0) {
                 PlayerName = name;
