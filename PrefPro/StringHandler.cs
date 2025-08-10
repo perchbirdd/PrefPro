@@ -97,53 +97,50 @@ public sealed unsafe class StringHandler : IDisposable
         genderParam.IntValue = _configuration.GetGender();
 
         var nameConfig = _nameHandlerConfig;
-        try
+        if (_nameHandlerConfig.Apply)
         {
-            if (nameConfig.Apply)
+            var sb = SeStringBuilder.SharedPool.Get();
+            try
             {
-                var sb = SeStringBuilder.SharedPool.Get();
-                try
+                foreach (var payload in seString)
                 {
-                    foreach (var payload in seString)
+                    if (nameConfig.ApplyFull && ShouldHandleStringPayload(payload))
                     {
-                        if (nameConfig.ApplyFull && ShouldHandleStringPayload(payload))
-                        {
-                            sb.Append(nameConfig.NameFull);
-                        }
-                        else if (nameConfig.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
-                        {
-                            sb.Append(nameConfig.NameFirst);
-                        }
-                        else if (nameConfig.ApplyLast && ShouldHandleSplitPayload(payload, 2))
-                        {
-                            sb.Append(nameConfig.NameLast);
-                        }
-                        else
-                        {
-                            sb.Append(payload);
-                        }
+                        sb.Append(nameConfig.NameFull);
                     }
-                    fixed (byte* newInput = sb.GetViewAsSpan())
-                        return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
+                    else if (nameConfig.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
+                    {
+                        sb.Append(nameConfig.NameFirst);
+                    }
+                    else if (nameConfig.ApplyLast && ShouldHandleSplitPayload(payload, 2))
+                    {
+                        sb.Append(nameConfig.NameLast);
+                    }
+                    else
+                    {
+                        sb.Append(payload);
+                    }
                 }
-                finally
-                {
-                    SeStringBuilder.SharedPool.Return(sb);
-                }
+                fixed (byte* newInput = sb.GetViewAsSpan())
+                    return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
             }
-            else
+            catch (Exception ex)
             {
-                return _formatStringHook.Original(thisPtr, input, localParameters, output);
+                DalamudApi.PluginLog.Error(ex, "PrefPro Exception");
+            }
+            finally
+            {
+                SeStringBuilder.SharedPool.Return(sb);
+                raceParam.IntValue = oldRace;
+                genderParam.IntValue = oldGender;
             }
         }
-        catch (Exception ex)
+        else
         {
-            DalamudApi.PluginLog.Error(ex, "PrefPro Exception");
-        }
-        finally
-        {
+            var result = _formatStringHook.Original(thisPtr, input, localParameters, output);
             raceParam.IntValue = oldRace;
             genderParam.IntValue = oldGender;
+            return result;
         }
 
         originalFormatString:
