@@ -21,7 +21,7 @@ public sealed unsafe class StringHandler : IDisposable
     private readonly LoginState _loginState;
     private readonly Configuration _configuration;
 
-    private HandlerConfig _handlerConfig = HandlerConfig.None;
+    private NameHandlerConfig _nameHandlerConfig = NameHandlerConfig.None;
 
     public StringHandler(LoginState loginState, Configuration configuration)
     {
@@ -74,10 +74,6 @@ public sealed unsafe class StringHandler : IDisposable
         if (!_configuration.Enabled)
             goto originalFormatString;
 
-        var data = _handlerConfig;
-        if (!data.Apply)
-            goto originalFormatString;
-
         var seString = input.AsReadOnlySeStringSpan();
         if (seString.IsEmpty || seString.IsTextOnly())
             goto originalFormatString;
@@ -100,43 +96,51 @@ public sealed unsafe class StringHandler : IDisposable
         var oldGender = genderParam.IntValue;
         genderParam.IntValue = _configuration.GetGender();
 
-        var sb = SeStringBuilder.SharedPool.Get();
-
-        try
+        var nameConfig = _nameHandlerConfig;
+        if (_nameHandlerConfig.Apply)
         {
-            foreach (var payload in seString)
+            var sb = SeStringBuilder.SharedPool.Get();
+            try
             {
-                if (data.ApplyFull && ShouldHandleStringPayload(payload))
+                foreach (var payload in seString)
                 {
-                    sb.Append(data.NameFull);
+                    if (nameConfig.ApplyFull && ShouldHandleStringPayload(payload))
+                    {
+                        sb.Append(nameConfig.NameFull);
+                    }
+                    else if (nameConfig.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
+                    {
+                        sb.Append(nameConfig.NameFirst);
+                    }
+                    else if (nameConfig.ApplyLast && ShouldHandleSplitPayload(payload, 2))
+                    {
+                        sb.Append(nameConfig.NameLast);
+                    }
+                    else
+                    {
+                        sb.Append(payload);
+                    }
                 }
-                else if (data.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
-                {
-                    sb.Append(data.NameFirst);
-                }
-                else if (data.ApplyLast && ShouldHandleSplitPayload(payload, 2))
-                {
-                    sb.Append(data.NameLast);
-                }
-                else
-                {
-                    sb.Append(payload);
-                }
+                fixed (byte* newInput = sb.GetViewAsSpan())
+                    return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
             }
-
-            fixed (byte* newInput = sb.GetViewAsSpan())
-                return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
+            catch (Exception ex)
+            {
+                DalamudApi.PluginLog.Error(ex, "PrefPro Exception");
+            }
+            finally
+            {
+                SeStringBuilder.SharedPool.Return(sb);
+                raceParam.IntValue = oldRace;
+                genderParam.IntValue = oldGender;
+            }
         }
-        catch (Exception ex)
+        else
         {
-            DalamudApi.PluginLog.Error(ex, "PrefPro Exception");
-        }
-        finally
-        {
-            SeStringBuilder.SharedPool.Return(sb);
-
+            var result = _formatStringHook.Original(thisPtr, input, localParameters, output);
             raceParam.IntValue = oldRace;
             genderParam.IntValue = oldGender;
+            return result;
         }
 
         originalFormatString:
@@ -147,21 +151,21 @@ public sealed unsafe class StringHandler : IDisposable
     {
         if (!_loginState.LoggedIn || string.IsNullOrEmpty(_configuration.Name))
         {
-            _handlerConfig = HandlerConfig.None;
+            _nameHandlerConfig = NameHandlerConfig.None;
         }
         else
         {
-            _handlerConfig = CreateConfig(_configuration, _loginState.PlayerName);
+            _nameHandlerConfig = CreateConfig(_configuration, _loginState.PlayerName);
         }
     }
 
-    private static HandlerConfig CreateConfig(Configuration config, string playerName)
+    private static NameHandlerConfig CreateConfig(Configuration config, string playerName)
     {
-        var data = new HandlerConfig();
+        var data = new NameHandlerConfig();
 
         if (string.IsNullOrEmpty(config.Name))
         {
-            return HandlerConfig.None;
+            return NameHandlerConfig.None;
         }
 
         if (config.Name != playerName)
@@ -251,7 +255,7 @@ public sealed unsafe class StringHandler : IDisposable
         return false;
     }
 
-    public class HandlerConfig
+    public class NameHandlerConfig
     {
         public bool Apply;
         public bool ApplyFull;
@@ -261,7 +265,7 @@ public sealed unsafe class StringHandler : IDisposable
         public ReadOnlySePayload? NameFirst;
         public ReadOnlySePayload? NameLast;
 
-        public static readonly HandlerConfig None = new()
+        public static readonly NameHandlerConfig None = new()
         {
             Apply = false
         };
