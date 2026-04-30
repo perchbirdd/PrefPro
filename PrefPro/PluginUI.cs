@@ -58,7 +58,7 @@ class PluginUI : IDisposable
         ImGui.SetNextWindowSize(size, ImGuiCond.FirstUseEver);
         if (ImGui.Begin("PrefPro Config", ref _settingsVisible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            if (DalamudApi.ClientState.LocalPlayer is null)
+            if (DalamudApi.ObjectTable.LocalPlayer is null)
             {
                 ImGui.TextWrapped("Configuration is not available while logged out or in a loading screen.");
                 ImGui.End();

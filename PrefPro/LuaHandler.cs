@@ -80,7 +80,7 @@ public unsafe class LuaHandler : IDisposable
 		var l = Framework.Instance()->LuaState.State;
 		l->luaL_loadbuffer(code, code.Length, "test_chunk");
 		if (l->lua_pcall(0, 1, 0) != 0)
-			throw new Exception(l->lua_tostring(-1));
+			throw new Exception(l->lua_tostring(-1).ToString());
 		var luaFunc = *(nint*)l->index2adr(-1);
 		l->lua_pop(1);
 		return *(nint*)(luaFunc + 0x20);
