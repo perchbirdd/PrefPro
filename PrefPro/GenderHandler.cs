@@ -104,7 +104,7 @@ public sealed unsafe class GenderHandler: IDisposable
 
     private int GetCutVoGenderDetour(nint a1, nint a2)
     {
-        var originalRet = _getCutVoGenderHook.Original(a1, a2);
+        var originalRet = _getCutVoGenderHook!.Original(a1, a2);
 
         if (!_configuration.Enabled)
             return originalRet;

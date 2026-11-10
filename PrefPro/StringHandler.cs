@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using Dalamud.Hooking;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.System.String;
@@ -74,7 +73,7 @@ public sealed unsafe class StringHandler : IDisposable
         if (!_configuration.Enabled)
             goto originalFormatString;
 
-        var seString = input.AsReadOnlySeStringSpan();
+        var seString = input.AsReadOnlySeString();
         if (seString.IsEmpty || seString.IsTextOnly())
             goto originalFormatString;
 
@@ -104,25 +103,11 @@ public sealed unsafe class StringHandler : IDisposable
             {
                 foreach (var payload in seString)
                 {
-                    if (nameConfig.ApplyFull && ShouldHandleStringPayload(payload))
-                    {
-                        sb.Append(nameConfig.NameFull);
-                    }
-                    else if (nameConfig.ApplyFirst && ShouldHandleSplitPayload(payload, 1))
-                    {
-                        sb.Append(nameConfig.NameFirst);
-                    }
-                    else if (nameConfig.ApplyLast && ShouldHandleSplitPayload(payload, 2))
-                    {
-                        sb.Append(nameConfig.NameLast);
-                    }
-                    else
-                    {
-                        sb.Append(payload);
-                    }
+                    sb.Append(ProcessPayload(payload));
                 }
+
                 fixed (byte* newInput = sb.GetViewAsSpan())
-                    return _formatStringHook.Original(thisPtr, newInput, localParameters, output);
+                    return _formatStringHook!.Original(thisPtr, newInput, localParameters, output);
             }
             catch (Exception ex)
             {
@@ -137,14 +122,14 @@ public sealed unsafe class StringHandler : IDisposable
         }
         else
         {
-            var result = _formatStringHook.Original(thisPtr, input, localParameters, output);
+            var result = _formatStringHook!.Original(thisPtr, input, localParameters, output);
             raceParam.IntValue = oldRace;
             genderParam.IntValue = oldGender;
             return result;
         }
 
         originalFormatString:
-        return _formatStringHook.Original(thisPtr, input, localParameters, output);
+        return _formatStringHook!.Original(thisPtr, input, localParameters, output);
     }
 
     public void RefreshConfig()
@@ -188,23 +173,12 @@ public sealed unsafe class StringHandler : IDisposable
         else
         {
             data.Apply = true;
-
-            var nameFull = GetNameText(playerName, config.Name, config.FullName);
-            var nameFirst = GetNameText(playerName, config.Name, config.FirstName);
-            var nameLast = GetNameText(playerName, config.Name, config.LastName);
-
-            data.NameFull = MakePayload(nameFull);
-            data.NameFirst = MakePayload(nameFirst);
-            data.NameLast = MakePayload(nameLast);
+            data.NameFull = GetNameText(playerName, config.Name, config.FullName);
+            data.NameFirst = GetNameText(playerName, config.Name, config.FirstName);
+            data.NameLast = GetNameText(playerName, config.Name, config.LastName);
         }
 
         return data;
-    }
-
-    private static ReadOnlySePayload MakePayload(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        return new ReadOnlySePayload(ReadOnlySePayloadType.Text, macroCode: default, bytes);
     }
 
     private static string GetNameText(string playerName, string configName, NameSetting setting)
@@ -225,8 +199,96 @@ public sealed unsafe class StringHandler : IDisposable
         }
     }
 
-    // <string(gstr1)> 
-    private static bool ShouldHandleStringPayload(ReadOnlySePayloadSpan payload)
+    private ReadOnlySePayload ProcessPayload(ReadOnlySePayload input)
+    {
+        if (input.Type == ReadOnlySePayloadType.Macro)
+        {
+            using var rssb = new RentedSeStringBuilder();
+
+            if (_nameHandlerConfig.ApplyFull && ShouldHandleStringPayload(input))
+            {
+                rssb.Builder
+                    .BeginMacro(MacroCode.String)
+                    .AppendStringExpression(_nameHandlerConfig.NameFull)
+                    .EndMacro();
+            }
+            else if (_nameHandlerConfig.ApplyFirst && ShouldHandleSplitPayload(input, 1))
+            {
+                rssb.Builder
+                    .BeginMacro(MacroCode.String)
+                    .AppendStringExpression(_nameHandlerConfig.NameFirst)
+                    .EndMacro();
+            }
+            else if (_nameHandlerConfig.ApplyLast && ShouldHandleSplitPayload(input, 2))
+            {
+                rssb.Builder
+                    .BeginMacro(MacroCode.String)
+                    .AppendStringExpression(_nameHandlerConfig.NameLast)
+                    .EndMacro();
+            }
+            else
+            {
+                rssb.Builder.BeginMacro(input.MacroCode);
+
+                foreach (var expr in input)
+                {
+                    ProcessExpression(rssb.Builder, expr);
+                }
+
+                rssb.Builder.EndMacro();
+            }
+
+            foreach (var outPayload in rssb.Builder.ToReadOnlySeString())
+            {
+                return outPayload;
+            }
+        }
+
+        return input;
+    }
+
+    private void ProcessExpression(SeStringBuilder builder, ReadOnlySeExpression expr)
+    {
+        if (expr.TryGetInt(out var intExpr))
+        {
+            builder.AppendIntExpression(intExpr);
+        }
+        else if (expr.TryGetString(out var s))
+        {
+            using var rssb = new RentedSeStringBuilder();
+
+            foreach (var payload in s)
+            {
+                rssb.Builder.Append(ProcessPayload(payload));
+            }
+
+            builder.AppendStringExpression(rssb.Builder.ToReadOnlySeString().AsSpan());
+        }
+        else if (expr.TryGetPlaceholderExpression(out var expressionType))
+        {
+            builder.AppendNullaryExpression((ExpressionType)expressionType);
+        }
+        else if (expr.TryGetParameterExpression(out expressionType, out var e1))
+        {
+            builder.BeginUnaryExpression((ExpressionType)expressionType);
+            ProcessExpression(builder, e1);
+            builder.EndExpression();
+        }
+        else if (expr.TryGetBinaryExpression(out expressionType, out e1, out var e2))
+        {
+            builder.BeginBinaryExpression((ExpressionType)expressionType);
+            ProcessExpression(builder, e1);
+            ProcessExpression(builder, e2);
+            builder.EndExpression();
+        }
+        else
+        {
+            throw new Exception($"Could not process expression {expr}");
+        }
+    }
+
+    // <string(gstr1)>
+    private static bool ShouldHandleStringPayload(ReadOnlySePayload payload)
     {
         return payload.Type == ReadOnlySePayloadType.Macro
                && payload.MacroCode == MacroCode.String
@@ -237,8 +299,8 @@ public sealed unsafe class StringHandler : IDisposable
                && gstrIndex == 1;
     }
 
-    // <split(<string(gstr1)>, ,index)> 
-    private static bool ShouldHandleSplitPayload(ReadOnlySePayloadSpan payload, int splitIndex)
+    // <split(<string(gstr1)>, ,index)>
+    private static bool ShouldHandleSplitPayload(ReadOnlySePayload payload, int splitIndex)
     {
         if (payload.Type == ReadOnlySePayloadType.Macro
             && payload.MacroCode == MacroCode.Split
@@ -261,9 +323,9 @@ public sealed unsafe class StringHandler : IDisposable
         public bool ApplyFull;
         public bool ApplyFirst;
         public bool ApplyLast;
-        public ReadOnlySePayload? NameFull;
-        public ReadOnlySePayload? NameFirst;
-        public ReadOnlySePayload? NameLast;
+        public string? NameFull;
+        public string? NameFirst;
+        public string? NameLast;
 
         public static readonly NameHandlerConfig None = new()
         {

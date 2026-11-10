@@ -1,4 +1,4 @@
-<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+﻿<Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
     <PluginVersion>1.3.0.3</PluginVersion>
   </PropertyGroup>
@@ -24,10 +24,6 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Reference Include="Microsoft.Extensions.ObjectPool" Private="false" />
-  </ItemGroup>
 
   <ItemGroup>
     <Content Include="PrefPro.yaml" />
